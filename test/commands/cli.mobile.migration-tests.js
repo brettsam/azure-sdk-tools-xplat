@@ -24,13 +24,14 @@
 
   2. Re-run the tests against the live Microsoft Azure endpints while capturing the
      HTTP traffic:
-  2.1. Make sure NOCK_OFF is still set to `true`
-  2.2. Set AZURE_NOCK_RECORD to `true`
+  2.1. set NOCK_OFF=
+  2.2  set AZURE_NOCK_RECORD=true  
   2.3. Run the tests with `npm test`. The new cli.mobile.domain-tests.nock.js will be generated.
 
   3. Validate the new mocks:
-  3.1. Unset both NOCK_OFF and AZURE_NOCK_RECORD environment variables
-  3.2. Run the tests with `npm test`.
+  3.1. set NOCK_OFF=
+  3.2. set AZURE_NOCK_RECORD=
+  3.3. Run the tests with `npm test`.
 */
 
 var should = require('should');
@@ -49,7 +50,7 @@ var primaryServiceName = 'brettsam-west-test';
 var secondaryServiceName = 'brettsam-east-test';
 
 function createService(serviceName, region, callback) {
-  suite.execute('mobile create %s brettsam iis6!dfu -p legacy -l %s --json', serviceName, region, function(result) {
+  suite.execute('mobile create %s brettsam FooBar#12 -p legacy -l %s --json', serviceName, region, function(result) {
     result.exitStatus.should.equal(0);
     var response = JSON.parse(result.text);
     response.should.have.property('Name', serviceName + 'mobileservice');
@@ -65,6 +66,13 @@ function scaleToBasic(serviceName, callback) {
     result.exitStatus.should.equal(0);
     result.text.should.equal('');
 
+    callback();
+  });
+}
+
+function deleteService(serviceName, callback) {
+  suite.execute('mobile delete %s -a -q -n --json', serviceName, function (result) {
+    // don't check for success here; this is used for cleanup and it may return 404.
     callback();
   });
 }
@@ -102,12 +110,18 @@ describe('cli', function () {
     after(function (done) {
       suite.teardownSuite(function() {
         if (!suite.isPlayback()) {
-          // Note: we don't have to delete secondaryServiceName as the migration takes care of that for us.
-          suite.execute('mobile delete %s -a -q -n --json', primaryServiceName, function (result) {
-            result.text.should.equal('');
-            result.exitStatus.should.equal(0);
-            done();
-          });
+          async.series([
+              function(callback) {
+                  deleteService(primaryServiceName, callback);
+              },
+              function(callback) {
+                  deleteService(secondaryServiceName, callback);
+              }
+              ],
+              function() {
+                  done();
+              }
+          );
         } else {
           done();
         }
